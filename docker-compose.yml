@@ -1,0 +1,11 @@
+services:
+  api:
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    image: furnace-v3:latest
+    container_name: furnace-v3-api
+    ports:
+      - "${PORT:-8002}:8002"
+    restart: unless-stopped
