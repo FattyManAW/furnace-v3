@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.state_machine import validate as validate_transition
 
 logger = logging.getLogger("furnace-v3")
-_GIT_COMMIT = pathlib.Path(__file__).parent.parent / "GIT_COMMIT"
+_GIT_COMMIT = pathlib.Path(__file__).parent / "GIT_COMMIT"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,7 +22,7 @@ app = FastAPI(title="排爐系統 v3", version="3.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 def _read_commit():
-    p = pathlib.Path(__file__).parent.parent / "GIT_COMMIT"
+    p = pathlib.Path(__file__).parent / "GIT_COMMIT"
     return p.read_text().strip() if p.exists() else "unknown"
 
 @app.get("/health")
