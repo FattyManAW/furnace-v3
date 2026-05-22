@@ -8,7 +8,6 @@ from src.state_machine import validate as validate_transition
 
 logger = logging.getLogger("furnace-v3")
 _GIT_COMMIT = pathlib.Path(__file__).parent.parent / "GIT_COMMIT"
-_COMMIT_HASH = _GIT_COMMIT.read_text().strip() if _GIT_COMMIT.exists() else "unknown"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,9 +21,13 @@ app = FastAPI(title="排爐系統 v3", version="3.0.0", lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+def _read_commit():
+    p = pathlib.Path(__file__).parent.parent / "GIT_COMMIT"
+    return p.read_text().strip() if p.exists() else "unknown"
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "commit": _COMMIT_HASH, "version": "3.0.0"}
+    return {"status": "ok", "commit": _read_commit(), "version": "3.0.0"}
 
 @app.patch("/api/v1/orders/{order_id}/status")
 def transition_status(order_id: str, body: dict):
