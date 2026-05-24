@@ -13,6 +13,16 @@ _GIT_COMMIT = pathlib.Path(__file__).parent / "GIT_COMMIT"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("furnace-v3 starting — supervision active, db ready")
+    # Auto-seed if empty
+    try:
+        db = get_db()
+        count = db.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        if count == 0:
+            import seed
+            logger.info(f"DB empty — seeding demo data")
+        db.close()
+    except Exception as e:
+        logger.warning(f"seed check skipped: {e}")
     yield
     logger.info("SIGTERM — draining")
     try:
