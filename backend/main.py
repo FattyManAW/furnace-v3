@@ -45,6 +45,7 @@ def _now():
 
 # ── Health ──────────────────────────────────────────────
 @app.get("/health")
+@app.get("/healthz")
 def health():
     return {"status": "ok", "commit": _read_commit(), "version": "3.1.0"}
 
