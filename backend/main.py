@@ -196,3 +196,50 @@ def stats():
         }
     finally:
         db.close()
+
+# ── Sync Bridge (furnace-v2 → v3) ────────────────────────
+FURNACE_V2_URL = "http://100.107.36.80:8002"
+
+@app.post("/api/v1/sync/from-v2")
+def sync_from_v2():
+    """從 furnace-v2 optimizer 結果匯入訂單到 v3"""
+    import urllib.request
+    import json as _json
+    db = get_db()
+    try:
+        req = urllib.request.Request(f"{FURNACE_V2_URL}/api/v1/schedule/optimize",
+                                     data=b"{}", headers={"Content-Type": "application/json"},
+                                     method="POST")
+        resp = urllib.request.urlopen(req, timeout=30)
+        schedule = _json.loads(resp.read())
+        imported = 0
+        skipped = 0
+        for ks in schedule.get("kiln_summary", []):
+            for entry in ks.get("orders", []):
+                plan_no = entry.get("plan_no", "")
+                if not plan_no:
+                    skipped += 1
+                    continue
+                existing = db.execute(
+                    "SELECT id FROM orders WHERE order_no=?", (plan_no,)).fetchone()
+                if existing:
+                    skipped += 1
+                    continue
+                db.execute(
+                    """INSERT INTO orders (order_no, product, quantity, priority, status,
+                       kiln_id, est_hours, notes, created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))""",
+                    (plan_no, f"排產工單 {plan_no}", entry.get("qty", 0),
+                     "normal", "pending",
+                     ks.get("kiln_name", ""), entry.get("hours", 0),
+                     f"from-v2: kiln={ks.get('kiln_id')}"))
+                imported += 1
+        db.commit()
+        return {"imported": imported, "skipped": skipped,
+                "total_v2": schedule["summary"]["total_orders"],
+                "generated_at": schedule["summary"].get("generated_at")}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Sync failed: {e}")
+    finally:
+        db.close()
