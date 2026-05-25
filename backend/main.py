@@ -202,7 +202,7 @@ FURNACE_V2_URL = "http://100.107.36.80:8002"
 
 @app.post("/api/v1/sync/from-v2")
 def sync_from_v2():
-    """從 furnace-v2 optimizer 結果匯入訂單到 v3"""
+    """從 furnace-v2 optimizer 結果匯入/更新訂單 + 自動標 scheduled"""
     import urllib.request
     import json as _json
     db = get_db()
@@ -213,7 +213,9 @@ def sync_from_v2():
         resp = urllib.request.urlopen(req, timeout=30)
         schedule = _json.loads(resp.read())
         imported = 0
+        updated = 0
         skipped = 0
+        now = _now()
         for ks in schedule.get("kiln_summary", []):
             for entry in ks.get("orders", []):
                 plan_no = entry.get("plan_no", "")
@@ -221,21 +223,28 @@ def sync_from_v2():
                     skipped += 1
                     continue
                 existing = db.execute(
-                    "SELECT id FROM orders WHERE order_no=?", (plan_no,)).fetchone()
+                    "SELECT id, status FROM orders WHERE order_no=?", (plan_no,)).fetchone()
                 if existing:
-                    skipped += 1
+                    # Update if still pending — mark as scheduled with optimizer data
+                    if existing["status"] == "pending":
+                        db.execute(
+                            "UPDATE orders SET status='scheduled', kiln_id=?, est_hours=?, updated_at=? WHERE id=?",
+                            (ks.get("kiln_name", ""), entry.get("hours", 0), now, existing["id"]))
+                        updated += 1
+                    else:
+                        skipped += 1
                     continue
                 db.execute(
                     """INSERT INTO orders (order_no, product, quantity, priority, status,
                        kiln_id, est_hours, notes, created_at, updated_at)
                        VALUES (?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))""",
                     (plan_no, f"排產工單 {plan_no}", entry.get("qty", 0),
-                     "normal", "pending",
+                     "normal", "scheduled",
                      ks.get("kiln_name", ""), entry.get("hours", 0),
-                     f"from-v2: kiln={ks.get('kiln_id')}"))
+                     f"optimized: kiln={ks.get('kiln_id')}"))
                 imported += 1
         db.commit()
-        return {"imported": imported, "skipped": skipped,
+        return {"imported": imported, "updated": updated, "skipped": skipped,
                 "total_v2": schedule["summary"]["total_orders"],
                 "generated_at": schedule["summary"].get("generated_at")}
     except Exception as e:
