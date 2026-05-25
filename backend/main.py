@@ -224,10 +224,14 @@ def stats():
             "SELECT status, COUNT(*) as cnt FROM orders GROUP BY status").fetchall()
         by_priority = db.execute(
             "SELECT priority, COUNT(*) as cnt FROM orders GROUP BY priority").fetchall()
+        total_hours = db.execute("SELECT COALESCE(SUM(est_hours),0) FROM orders").fetchone()[0]
+        kilns_used = db.execute("SELECT COUNT(DISTINCT kiln_id) FROM orders WHERE kiln_id!=''").fetchone()[0]
         return {
             "total": total,
             "by_status": {r["status"]: r["cnt"] for r in by_status},
             "by_priority": {r["priority"]: r["cnt"] for r in by_priority},
+            "total_hours": round(total_hours, 1),
+            "kilns_used": kilns_used,
         }
     finally:
         db.close()
