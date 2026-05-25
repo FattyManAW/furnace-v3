@@ -253,3 +253,27 @@ def sync_from_v2():
         raise HTTPException(500, f"Sync failed: {e}")
     finally:
         db.close()
+# ── Cross-System Health Aggregator ──────────────────────
+@app.get("/api/v1/health/full")
+def full_health():
+    """聚合 furnace-v2 + otd-v2 + otd-v3 健康狀態"""
+    import urllib.request
+    services = {
+        "furnace-v2": "http://100.107.36.80:8002/health",
+        "furnace-v3": "self",
+        "otd-v2": "http://100.107.36.80:8004/healthz",
+        "otd-v3": "http://100.107.36.80:8006/health",
+    }
+    results = {}
+    for name, url in services.items():
+        try:
+            if url == "self":
+                results[name] = {"status": "ok", "commit": _read_commit(), "version": "3.1.0"}
+            else:
+                resp = urllib.request.urlopen(url, timeout=5)
+                import json as _json
+                data = _json.loads(resp.read())
+                results[name] = data
+        except Exception as e:
+            results[name] = {"status": "unreachable", "error": str(e)[:80]}
+    return {"services": results, "timestamp": _now()}
