@@ -63,7 +63,7 @@ def list_orders(status: str = Query(None), priority: str = Query(None),
         rows = db.execute(
             f"SELECT * FROM orders{where} ORDER BY id DESC LIMIT ? OFFSET ?",
             params + [limit, offset]).fetchall()
-        total = db.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        total = db.execute(f"SELECT COUNT(*) FROM orders{where}", params).fetchone()[0]
         return {"items": [_to_dict(r) for r in rows], "total": total}
     finally:
         db.close()
