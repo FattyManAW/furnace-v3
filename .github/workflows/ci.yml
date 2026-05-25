@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install deps
+        run: pip install -r backend/requirements.txt
+      - name: Run tests
+        working-directory: backend
+        run: python -m pytest tests/ -v --timeout=30 2>/dev/null || python -m pytest tests/ -v
+      - name: Health smoke
+        working-directory: backend
+        run: |
+          python -c "
+          from main import app
+          from fastapi.testclient import TestClient
+          c = TestClient(app)
+          r = c.get('/health')
+          assert r.status_code == 200, f'health fail: {r.status_code}'
+          print(f'health OK: {r.json()}')
+          "
