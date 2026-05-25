@@ -168,6 +168,40 @@ def delete_order(order_id: int):
     finally:
         db.close()
 
+# ── Batch Status Transition (Kanban DnD) ───────────────
+@app.post("/api/v1/orders/transition")
+def batch_transition(body: dict):
+    """批次狀態轉換：kanban 拖曳後 push 狀態變更「order_ids + to_status」"""
+    order_ids = body.get("order_ids", [])
+    to_status = body.get("to_status", "")
+    if not order_ids or not isinstance(order_ids, list):
+        raise HTTPException(400, "order_ids required (list)")
+    if to_status not in VALID_STATUSES:
+        raise HTTPException(400, f"Invalid status: {to_status}")
+    db = get_db()
+    try:
+        completed = 0
+        failed = []
+        now = _now()
+        for oid in order_ids:
+            existing = db.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
+            if not existing:
+                failed.append({"id": oid, "reason": "not found"})
+                continue
+            ok, err = validate_transition("order", existing["status"], to_status)
+            if not ok:
+                failed.append({"id": oid, "reason": err})
+                continue
+            db.execute("UPDATE orders SET status=?, updated_at=? WHERE id=?", (to_status, now, oid))
+            completed += 1
+        db.commit()
+        return {"completed": completed, "failed": failed, "to_status": to_status}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
 # ── Kanban (live data) ──────────────────────────────────
 @app.get("/api/v1/kanban")
 def kanban():
